@@ -5,7 +5,14 @@
 # مثال:
 #   sudo bash deploy/install.sh neuraeco.ir admin 'S3cure-Pass!'
 set -euo pipefail
-DOMAIN="${1:?domain لازم است}"; AUSER="${2:?admin user لازم است}"; APASS="${3:?admin pass لازم است}"
+DOMAIN="${1:-}"; AUSER="${2:-}"; APASS="${3:-}"
+[ -n "$DOMAIN" ] || read -rp "دامنه (مثلاً neuraeco.ir): " DOMAIN
+[ -n "$AUSER" ] || read -rp "نام کاربریِ سوپرادمین: " AUSER
+while [ "${#APASS}" -lt 8 ]; do
+  [ -n "$APASS" ] && echo "رمز باید حداقل ۸ نویسه باشد."
+  read -rsp "رمزِ سوپرادمین (حداقل ۸ نویسه): " APASS; echo
+done
+DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN#https://}"; DOMAIN="${DOMAIN%%/*}"; DOMAIN="${DOMAIN#www.}"
 APP=/opt/neuraeco
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 export DEBIAN_FRONTEND=noninteractive
