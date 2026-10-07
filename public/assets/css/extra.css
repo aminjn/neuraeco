@@ -1,0 +1,14 @@
+/* تکمیلیِ نسخهٔ سرور: لینک‌های لنگر، نمادها و متنِ صفحات */
+html, body { margin:0; }
+html { scroll-behavior:smooth; }
+@font-face { font-family:'Neogrey'; src:url('../fonts/NeogreyMedium.otf') format('opentype'); font-weight:400 700; font-display:swap; }
+[data-site-public] section[id] { scroll-margin-top:80px; }
+[data-site-public] .acard:hover { transform:none; }
+[data-site-public] .foot-txt { font-size:13px; color:var(--ink-2); }
+[data-site-public] .enamad { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:16px; }
+[data-site-public] .enamad img { max-width:110px; height:auto; background:#fff; border-radius:10px; }
+[data-site-public] .prose p { font-size:14.5px; color:var(--ink-2); margin-bottom:14px; }
+[data-site-public] .article .body h3 { font-size:16.5px; font-weight:800; margin:22px 0 9px; }
+[data-site-public] .article .body a { text-decoration:underline; }
+[data-site-public] .article .contact-grid { margin-top:24px; }
+[data-site-public] .page-lead { font-size:14.5px; color:var(--ink-2); margin-bottom:20px; }
