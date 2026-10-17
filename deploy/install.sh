@@ -19,7 +19,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo "==> بسته‌های پایه"
 apt-get update -y
-apt-get install -y nginx curl ca-certificates xz-utils rsync
+apt-get install -y nginx openssl curl ca-certificates xz-utils rsync
 
 need_node() { ! command -v node >/dev/null 2>&1 || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 18 ]; }
 if need_node; then
@@ -65,10 +65,20 @@ systemctl enable --now neuraeco
 systemctl restart neuraeco
 
 echo "==> nginx"
+# گواهیِ خودامضا برای 443: اگر آروان با HTTPS به سرور وصل شود هم 502 نمی‌دهد
+if [ ! -f /etc/ssl/neuraeco/origin.crt ]; then
+  mkdir -p /etc/ssl/neuraeco
+  openssl req -x509 -nodes -newkey rsa:2048 -days 3650 -subj "/CN=$DOMAIN" \
+    -keyout /etc/ssl/neuraeco/origin.key -out /etc/ssl/neuraeco/origin.crt >/dev/null 2>&1
+fi
 cat > /etc/nginx/sites-available/neuraeco <<NGX
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    ssl_certificate /etc/ssl/neuraeco/origin.crt;
+    ssl_certificate_key /etc/ssl/neuraeco/origin.key;
     server_name $DOMAIN www.$DOMAIN _;
     client_max_body_size 10m;
     location / {
@@ -76,13 +86,14 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-Proto \$http_x_forwarded_proto;
+        proxy_connect_timeout 5s;
     }
 }
 NGX
 rm -f /etc/nginx/sites-enabled/default
 ln -sf /etc/nginx/sites-available/neuraeco /etc/nginx/sites-enabled/neuraeco
 nginx -t && systemctl reload nginx
-command -v ufw >/dev/null 2>&1 && ufw allow 80/tcp >/dev/null 2>&1 || true
+command -v ufw >/dev/null 2>&1 && { ufw allow 80/tcp; ufw allow 443/tcp; } >/dev/null 2>&1 || true
 
 sleep 1
 curl -fsS -o /dev/null -w "local check: %{http_code}\n" http://127.0.0.1/ || true
