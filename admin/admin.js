@@ -11,7 +11,7 @@
     }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
   }
   function status(t, cls) { var s = $('#status'); s.textContent = t; s.className = 'status ' + (cls || ''); }
-  function markDirty() { dirty = true; status('تغییرات ذخیره نشده', 'bad'); }
+  function markDirty() { dirty = true; status('تغییرات ذخیره نشده', 'bad'); window.dispatchEvent(new Event('neura:dirty')); }
 
   var ICON_HELP = 'کلاس Font Awesome، مثل fa-solid fa-phone';
   var SECTIONS = [
@@ -30,6 +30,7 @@
       { k: 'enamadHtml', l: 'کد نماد (فوتر)', t: 'code' },
       { k: 'headHtml', l: 'کد داخل head (متای تأیید، آمار و …)', t: 'code' },
     ] },
+    { id: 'design', title: 'ظاهر و گرافیک', icon: 'fa-solid fa-palette', custom: 'design' },
     { id: 'home', title: 'صفحهٔ اصلی', icon: 'fa-solid fa-house', path: ['home'], fields: [
       { k: 'heroEyebrow', l: 'برچسب بالای تیتر' }, { k: 'heroTitle', l: 'تیتر' }, { k: 'heroTitleAccent', l: 'بخش رنگی تیتر' },
       { k: 'heroP1', l: 'پاراگراف اول', t: 'textarea' }, { k: 'heroP2', l: 'پاراگراف دوم', t: 'textarea' },
@@ -113,6 +114,12 @@
     }
     var inp;
     if (t === 'md') { wrap.appendChild(mdEditor(obj, f.k)); return wrap; }
+    if (t === 'number') {
+      inp = el('input', { type: 'number', min: f.min, max: f.max, step: f.step || 1, dir: 'ltr' });
+      inp.value = v == null ? '' : v;
+      inp.addEventListener('input', function () { set(Number(inp.value)); });
+      wrap.appendChild(inp); return wrap;
+    }
     if (t === 'textarea' || t === 'code' || t === 'big') {
       inp = el('textarea', { class: t === 'code' ? 'code' : t === 'big' ? 'big' : '' });
       inp.value = v == null ? '' : v;
@@ -251,6 +258,10 @@
     ]);
     panel.appendChild(grid);
     panel.appendChild(fieldEl(p, { k: 'description', l: 'توضیح کوتاه برای گوگل (سئو)', t: 'textarea' }, noop));
+    panel.appendChild(el('div', { class: 'grid2' }, [
+      fieldEl(p, { k: 'cover', l: 'تصویر بالای صفحه (اختیاری)', t: 'image' }, noop),
+      fieldEl(p, { k: 'width', l: 'عرض متن', t: 'select', o: [['narrow', 'باریک (خواناتر)'], ['wide', 'تمام‌عرض']] }, noop),
+    ]));
     var toggles = el('div', { class: 'toggles' });
     [{ k: 'enabled', l: 'فعال' }, { k: 'inMenu', l: 'در منوی بالا' }, { k: 'inFooter', l: 'در فوتر' }, { k: 'showContact', l: 'اطلاعات تماس زیر متن' }]
       .forEach(function (f) { f.t = 'bool'; toggles.appendChild(fieldEl(p, f, noop)); });
@@ -258,6 +269,113 @@
     var w = el('div', { class: 'field' }, [el('span', { text: 'متن صفحه' })]);
     w.appendChild(mdEditor(p, 'body'));
     panel.appendChild(w);
+  }
+
+
+  // ── ظاهر و گرافیک: طرح‌های آماده + تنظیمات + پیش‌نمایشِ زندهٔ تغییراتِ ذخیره‌نشده ──
+  var META = null, prevSlug = '', prevDevice = 'desktop';
+  function designPanel(panel) {
+    if (!META) {
+      panel.appendChild(el('p', { class: 'muted', text: 'در حال بارگذاری…' }));
+      api('GET', 'design-meta').then(function (m) { META = m; show('design'); });
+      return;
+    }
+    var D = C.design || (C.design = {});
+    Object.keys(META.defaults).forEach(function (k) { if (D[k] === undefined) D[k] = META.defaults[k]; });
+    panel.classList.add('wide');
+    var form = el('div', { class: 'design-form' });
+    var side = el('div', { class: 'design-prev' });
+    panel.appendChild(el('div', { class: 'design-grid' }, [form, side]));
+    var re = function () { var y = window.scrollY; show('design'); window.scrollTo(0, y); };
+
+    var presets = el('div', { class: 'presets' });
+    Object.keys(META.presets).forEach(function (id) {
+      var pr = META.presets[id];
+      presets.appendChild(el('button', { type: 'button', class: 'preset' + (D.preset === id ? ' on' : ''), onclick: function () {
+        Object.keys(pr).forEach(function (k) { if (k !== 'title') D[k] = pr[k]; });
+        D.preset = id; if (C.home) C.home.heroAccent = pr.brand; markDirty(); re();
+      } }, [
+        el('span', { class: 'sw' }, [pr.brand, pr.accent, pr.bgLight, pr.bgDark].map(function (c) { return el('i', { style: 'background:' + c }); })),
+        el('b', { text: pr.title }),
+      ]));
+    });
+    form.appendChild(el('div', { class: 'card' }, [el('h3', { text: 'طرح‌های آماده' }), el('p', { class: 'muted', text: 'یکی را بزنید، بعد هر جزئی را پایین‌تر عوض کنید.' }), presets]));
+
+    function group(title, fields) {
+      var box = el('div', { class: 'card' }, [el('h3', { text: title })]);
+      var g = el('div', { class: 'grid2' });
+      fields.forEach(function (f) { (f.full ? box : g).appendChild(fieldEl(D, f, re)); });
+      box.insertBefore(g, box.children[1] || null);
+      form.appendChild(box);
+    }
+    group('رنگ‌ها', [
+      { k: 'brand', l: 'رنگ اصلی', t: 'color' }, { k: 'accent', l: 'رنگ مکمل', t: 'color' },
+      { k: 'accent2', l: 'رنگ مکمل دوم', t: 'color' },
+      { k: 'bgLight', l: 'پس‌زمینه (تم روشن)', t: 'color' }, { k: 'inkLight', l: 'متن (تم روشن)', t: 'color' },
+      { k: 'bgDark', l: 'پس‌زمینه (تم تیره)', t: 'color' }, { k: 'inkDark', l: 'متن (تم تیره)', t: 'color' },
+    ]);
+    group('فونت و اندازه', [
+      { k: 'font', l: 'فونت', t: 'select', o: [['kamand', 'کمند (فونت نورا)'], ['vazir', 'وزیرمتن'], ['system', 'فونت سیستم']] },
+      { k: 'fontSize', l: 'اندازهٔ متن (px)', t: 'number', min: 12, max: 20 },
+      { k: 'width', l: 'حداکثر عرض صفحه (px)', t: 'number', min: 900, max: 1600, step: 20 },
+    ]);
+    group('شکل و سبک', [
+      { k: 'radius', l: 'گوشه‌ها', t: 'select', o: [['round', 'خیلی گرد'], ['soft', 'کمی گرد'], ['sharp', 'تیز']] },
+      { k: 'buttons', l: 'دکمه‌ها', t: 'select', o: [['glass', 'شیشه‌ای'], ['solid', 'توپر'], ['outline', 'خطی']] },
+      { k: 'cardStyle', l: 'کارت‌ها', t: 'select', o: [['soft', 'ملایم'], ['border', 'با حاشیه'], ['shadow', 'با سایه']] },
+      { k: 'headerStyle', l: 'نوار بالا', t: 'select', o: [['glass', 'شیشه‌ای'], ['solid', 'توپر']] },
+      { k: 'blobs', l: 'لکه‌های رنگیِ پس‌زمینه', t: 'bool' },
+    ]);
+    group('صفحهٔ اصلی', [
+      { k: 'heroImage', l: 'جای تصویر اصلی', t: 'select', o: [['left', 'چپ'], ['right', 'راست'], ['none', 'بدون تصویر']] },
+      { k: 'heroStyle', l: 'سبک تصویر', t: 'select', o: [['spectrum', 'دایره با هالهٔ متحرک'], ['plain', 'تصویر ساده']] },
+      { k: 'heroSize', l: 'اندازهٔ تصویر (px)', t: 'number', min: 200, max: 480, step: 10 },
+      { k: 'agentCols', l: 'ستون‌های کارت ایجنت', t: 'select', o: [['auto', 'خودکار'], ['2', '۲'], ['3', '۳'], ['4', '۴']] },
+    ]);
+    group('آیکن و CSS دلخواه', [
+      { k: 'favicon', l: 'آیکن تب مرورگر (favicon)', t: 'image', full: true },
+      { k: 'customCss', l: 'CSS دلخواه (برای تغییرات پیشرفته)', t: 'code', full: true, h: 'انتخابگرها را با [data-site-public] شروع کنید' },
+    ]);
+    form.appendChild(el('button', { class: 'btn danger', type: 'button', onclick: function () {
+      if (!confirm('ظاهر به حالت اولیه برگردد؟')) return;
+      C.design = JSON.parse(JSON.stringify(META.defaults)); markDirty(); re();
+    } }, [el('i', { class: 'fa-solid fa-rotate-left' }), document.createTextNode('ظاهرِ پیش‌فرض')]));
+
+    // پیش‌نمایش
+    var sel = el('select', { onchange: function () { prevSlug = sel.value; load(); } },
+      [el('option', { value: '', text: 'صفحهٔ اصلی' })].concat((C.pages || []).filter(function (p) { return p.slug; })
+        .map(function (p) { return el('option', { value: p.slug, text: p.title }); })));
+    sel.value = prevSlug;
+    var devBtns = el('div', { class: 'dev' }, [['desktop', 'fa-solid fa-desktop'], ['mobile', 'fa-solid fa-mobile-screen']].map(function (d) {
+      return el('button', { type: 'button', class: 'btn sm' + (prevDevice === d[0] ? ' primary' : ''), onclick: function () { prevDevice = d[0]; re(); } }, [el('i', { class: d[1] })]);
+    }));
+    var frame = el('iframe', { sandbox: 'allow-scripts', class: 'pv-frame ' + prevDevice, title: 'پیش‌نمایش' });
+    side.appendChild(el('div', { class: 'pv-bar' }, [el('b', { text: 'پیش‌نمایش زنده' }), sel, devBtns]));
+    side.appendChild(el('div', { class: 'pv-wrap ' + prevDevice }, [frame]));
+    side.appendChild(el('p', { class: 'muted', text: 'تغییرات قبل از ذخیره همین‌جا دیده می‌شوند؛ برای اعمال روی سایت «ذخیره» را بزنید.' }));
+    function fit() {
+      var w = frame.parentNode;
+      if (!w) return;
+      if (prevDevice === 'desktop') {
+        var sc = Math.min(1, w.clientWidth / 1280);
+        frame.style.width = '1280px'; frame.style.height = (w.clientHeight / sc) + 'px';
+        frame.style.transform = 'scale(' + sc + ')'; frame.style.transformOrigin = 'top right';
+      } else { frame.style.width = ''; frame.style.height = ''; frame.style.transform = ''; }
+    }
+    setTimeout(fit, 0);
+    if (designPanel._r) window.removeEventListener('resize', designPanel._r);
+    designPanel._r = fit; window.addEventListener('resize', fit);
+    var t = 0;
+    function load() {
+      clearTimeout(t);
+      t = setTimeout(function () {
+        api('POST', 'preview-page', { content: C, slug: prevSlug }).then(function (r) { frame.srcdoc = r.html; }).catch(function (e) { status(e.message, 'bad'); });
+      }, 350);
+    }
+    if (designPanel._h) window.removeEventListener('neura:dirty', designPanel._h);
+    designPanel._h = function () { if (cur === 'design') load(); };
+    window.addEventListener('neura:dirty', designPanel._h);
+    load();
   }
 
   function accountPanel(panel) {
@@ -302,10 +420,11 @@
     var sec = SECTIONS.filter(function (s) { return s.id === id; })[0];
     $('#secTitle').textContent = sec.title;
     Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (b) { b.classList.toggle('on', b.dataset.id === id); });
-    var panel = $('#panel'); panel.innerHTML = '';
+    var panel = $('#panel'); panel.innerHTML = ''; panel.classList.remove('wide');
     if (sec.help) panel.appendChild(el('div', { class: 'help', html: sec.help }));
     if (sec.custom === 'account') { accountPanel(panel); return; }
     if (sec.custom === 'pages') { pagesPanel(panel); return; }
+    if (sec.custom === 'design') { designPanel(panel); return; }
     var y = window.scrollY;
     var rerender = function () { show(id); window.scrollTo(0, y); };
     var obj = objAt(sec.path);

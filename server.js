@@ -10,6 +10,7 @@ var fs = require('fs');
 var path = require('path');
 var crypto = require('crypto');
 var render = require('./lib/render');
+var design = require('./lib/design');
 
 var ROOT = __dirname;
 var DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
@@ -116,6 +117,7 @@ function serveFile(res, base, rel, cache) {
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(f).toLowerCase()] || 'application/octet-stream',
       'Content-Length': st.size, 'Cache-Control': cache, 'X-Content-Type-Options': 'nosniff',
+      'Access-Control-Allow-Origin': '*',
     });
     fs.createReadStream(f).pipe(res);
   });
@@ -211,6 +213,18 @@ function api(req, res, route) {
         try { fs.copyFileSync(CONTENT, CONTENT + '.bak'); } catch (e) { /* — */ }
         writeJson(CONTENT, c);
         json(res, 200, { ok: true, content: c });
+      } catch (e) { json(res, 400, { error: e.message }); }
+    });
+  }
+  if (route === 'design-meta') return json(res, 200, { presets: design.PRESETS, defaults: design.DEFAULT_DESIGN });
+  if (route === 'preview-page' && req.method === 'POST') {
+    return readBody(req, 2 * 1024 * 1024, function (err, b) {
+      if (err || !b || !b.content) return json(res, 400, { error: 'دادهٔ نامعتبر' });
+      try {
+        var pc = cleanContent(JSON.parse(JSON.stringify(b.content)));
+        var slug = String(b.slug || '');
+        var html = slug ? render.page(pc, slug) : render.home(pc);
+        json(res, 200, { html: html || render.notFound(pc) });
       } catch (e) { json(res, 400, { error: e.message }); }
     });
   }

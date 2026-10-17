@@ -12,3 +12,11 @@ html { scroll-behavior:smooth; }
 [data-site-public] .article .body a { text-decoration:underline; }
 [data-site-public] .article .contact-grid { margin-top:24px; }
 [data-site-public] .page-lead { font-size:14.5px; color:var(--ink-2); margin-bottom:20px; }
+@font-face { font-family:'Vazirmatn'; src:url('../fonts/Vazirmatn-Light.woff2') format('woff2'); font-weight:300; font-display:swap; }
+@font-face { font-family:'Vazirmatn'; src:url('../fonts/Vazirmatn-Regular.woff2') format('woff2'); font-weight:400; font-display:swap; }
+@font-face { font-family:'Vazirmatn'; src:url('../fonts/Vazirmatn-Medium.woff2') format('woff2'); font-weight:500; font-display:swap; }
+@font-face { font-family:'Vazirmatn'; src:url('../fonts/Vazirmatn-Bold.woff2') format('woff2'); font-weight:600 700; font-display:swap; }
+@font-face { font-family:'Vazirmatn'; src:url('../fonts/Vazirmatn-ExtraBold.woff2') format('woff2'); font-weight:800; font-display:swap; }
+@font-face { font-family:'Vazirmatn'; src:url('../fonts/Vazirmatn-Black.woff2') format('woff2'); font-weight:900; font-display:swap; }
+[data-site-public] .page-cover { width:100%; max-height:360px; object-fit:cover; border-radius:18px; margin-bottom:22px; }
+[data-site-public] .hero-plain img { width:100%; max-width:420px; border-radius:24px; object-fit:cover; }
