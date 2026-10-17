@@ -20,3 +20,34 @@ html { scroll-behavior:smooth; }
 @font-face { font-family:'Vazirmatn'; src:url('../fonts/Vazirmatn-Black.woff2') format('woff2'); font-weight:900; font-display:swap; }
 [data-site-public] .page-cover { width:100%; max-height:360px; object-fit:cover; border-radius:18px; margin-bottom:22px; }
 [data-site-public] .hero-plain img { width:100%; max-width:420px; border-radius:24px; object-fit:cover; }
+/* لوگوی رنگ‌پذیر: همان تصویر به‌عنوانِ ماسک */
+[data-site-public] .mark-mask { display:block; flex-shrink:0; -webkit-mask-size:contain; mask-size:contain; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; -webkit-mask-position:center; mask-position:center; }
+/* نوارِ اطلاع‌رسانی */
+[data-site-public] .announce { position:relative; z-index:61; text-align:center; padding:8px 16px; font-size:13px; font-weight:600; background:var(--brand); color:#fff; }
+[data-site-public] .announce a { color:#fff; }
+[data-site-public] .announce a:hover { color:#fff; opacity:.9; }
+[data-site-public] .announce i { font-size:10px; margin-inline-start:4px; }
+/* دکمه‌های شناور */
+[data-site-public] .floating { position:fixed; left:16px; bottom:18px; z-index:80; display:flex; flex-direction:column; gap:10px; }
+[data-site-public] .floating a { width:50px; height:50px; border-radius:50%; display:grid; place-items:center; color:#fff; font-size:22px; box-shadow:0 8px 22px rgba(0,0,0,.22); transition:transform .15s; }
+[data-site-public] .floating a:hover { transform:scale(1.07); color:#fff; }
+[data-site-public] .fl-wa { background:#25D366; } [data-site-public] .fl-tg { background:#229ED9; } [data-site-public] .fl-ph { background:var(--brand); }
+/* فرمِ تماس */
+[data-site-public] .contact-form { margin-top:22px; display:flex; flex-direction:column; gap:12px; }
+[data-site-public] .contact-form .cf-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+[data-site-public] .contact-form .field { display:flex; flex-direction:column; gap:5px; font-size:13px; font-weight:700; }
+[data-site-public] .contact-form input, [data-site-public] .contact-form textarea { padding:11px 14px; border-radius:12px; border:1px solid var(--line); background:var(--bg-1); font-size:14px; font-weight:400; outline:none; resize:vertical; }
+[data-site-public] .contact-form input:focus, [data-site-public] .contact-form textarea:focus { border-color:var(--brand); }
+[data-site-public] .contact-form { position:relative; }
+[data-site-public] .contact-form .hp { position:absolute; top:0; right:0; width:1px; height:1px; padding:0; border:0; overflow:hidden; clip-path:inset(50%); opacity:0; pointer-events:none; }
+[data-site-public] .contact-form button { align-self:flex-start; }
+[data-site-public] .cf-msg { font-size:13px; min-height:1em; margin:0; }
+[data-site-public] .cf-msg.ok { color:var(--ok); } [data-site-public] .cf-msg.bad { color:#dc2626; }
+@media (max-width:560px) { [data-site-public] .contact-form .cf-grid { grid-template-columns:1fr; } [data-site-public] .floating a { width:46px; height:46px; font-size:20px; } }
+/* حالتِ تعمیر */
+[data-site-public] .maint { min-height:100vh; display:grid; place-items:center; text-align:center; padding:24px; position:relative; z-index:1; }
+[data-site-public] .maint .logo { justify-content:center; margin-bottom:20px; }
+[data-site-public] .maint h1 { font-size:30px; font-weight:800; margin-bottom:10px; }
+[data-site-public] .maint p { color:var(--ink-2); }
+/* لینکِ ویژهٔ منو */
+[data-site-public] .menu a.cta { color:#fff; }

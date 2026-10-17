@@ -100,3 +100,21 @@
     window.addEventListener('resize', function () { clearTimeout(tmr); tmr = setTimeout(size, 160); });
   });
 })();
+
+// ── فرمِ تماس: ارسال به /api/contact ─────────────────────────────────────────
+(function () {
+  Array.prototype.forEach.call(document.querySelectorAll('[data-contact-form]'), function (f) {
+    var msg = f.querySelector('.cf-msg'), btn = f.querySelector('button[type=submit]');
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var fd = new FormData(f), body = {};
+      fd.forEach(function (v, k) { body[k] = String(v); });
+      btn.disabled = true; msg.className = 'cf-msg'; msg.textContent = 'در حال ارسال…';
+      fetch('/api/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || 'خطا'); return j; }); })
+        .then(function () { msg.className = 'cf-msg ok'; msg.textContent = msg.getAttribute('data-ok'); f.reset(); })
+        .catch(function (er) { msg.className = 'cf-msg bad'; msg.textContent = er.message || 'ارسال نشد؛ دوباره امتحان کنید.'; })
+        .then(function () { btn.disabled = false; });
+    });
+  });
+})();

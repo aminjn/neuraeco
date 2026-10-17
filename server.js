@@ -154,6 +154,45 @@ function cleanContent(c) {
 
 var UPLOAD_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'image/x-icon': '.ico' };
 
+var BACKUPS = path.join(DATA, 'backups');
+var MESSAGES = path.join(DATA, 'messages.json');
+var STATS = path.join(DATA, 'stats.json');
+fs.mkdirSync(BACKUPS, { recursive: true });
+
+// پشتیبانِ خودکار پیش از هر ذخیره؛ ۳۰ نسخهٔ آخر می‌ماند
+function backup(reason) {
+  try {
+    if (!fs.existsSync(CONTENT)) return;
+    var name = 'content-' + new Date().toISOString().replace(/[:.]/g, '-') + (reason ? '-' + reason : '') + '.json';
+    fs.copyFileSync(CONTENT, path.join(BACKUPS, name));
+    var all = fs.readdirSync(BACKUPS).filter(function (f) { return /\.json$/.test(f); }).sort();
+    all.slice(0, Math.max(0, all.length - 30)).forEach(function (f) { fs.unlinkSync(path.join(BACKUPS, f)); });
+  } catch (e) { console.error('backup', e.message); }
+}
+
+// آمارِ بازدید: شمارشِ روزانه در حافظه، هر دقیقه روی دیسک؛ ۹۰ روز نگه داشته می‌شود
+var stats = readJson(STATS, { days: {} });
+var statsDirty = false;
+function dayKey(d) { return new Date(d.getTime() + 3.5 * 3600 * 1000).toISOString().slice(0, 10); }
+function countView(req, p) {
+  var ua = String(req.headers['user-agent'] || '');
+  if (!ua || /bot|crawl|spider|slurp|curl|wget|python|headless|monitor/i.test(ua)) return;
+  var k = dayKey(new Date());
+  var d = stats.days[k] || (stats.days[k] = { views: 0, pages: {} });
+  d.views++; d.pages[p] = (d.pages[p] || 0) + 1;
+  statsDirty = true;
+}
+setInterval(function () {
+  if (!statsDirty) return;
+  var keys = Object.keys(stats.days).sort();
+  keys.slice(0, Math.max(0, keys.length - 90)).forEach(function (k) { delete stats.days[k]; });
+  try { writeJson(STATS, stats); statsDirty = false; } catch (e) { /* — */ }
+}, 60000).unref();
+
+// پیام‌های فرمِ تماس: محدودیتِ ۵ پیام در ۱۰ دقیقه برای هر IP
+var contactHits = {};
+function isAdminReq(req) { return !!sessionUser(req); }
+
 // ── مسیرها ────────────────────────────────────────────────────────────────
 function handle(req, res) {
   var url = new URL(req.url, 'http://x');
@@ -161,7 +200,11 @@ function handle(req, res) {
 
   if (p.indexOf('/assets/') === 0) return serveFile(res, path.join(ROOT, 'public', 'assets'), p.slice(8), 'public, max-age=604800');
   if (p.indexOf('/uploads/') === 0) return serveFile(res, UPLOADS, p.slice(9), 'public, max-age=604800');
-  if (p === '/robots.txt') return send(res, 200, 'User-agent: *\nDisallow: /admin\n', 'text/plain; charset=utf-8');
+  var host = String(req.headers['x-forwarded-host'] || req.headers.host || '');
+  var origin = String((content().site || {}).baseUrl || '').replace(/\/+$/, '') || ((isHttps(req) ? 'https://' : 'http://') + host);
+  if (p === '/robots.txt') return send(res, 200, 'User-agent: *\nDisallow: /admin\nSitemap: ' + origin + '/sitemap.xml\n', 'text/plain; charset=utf-8');
+  if (p === '/sitemap.xml') return send(res, 200, render.sitemap(content(), origin), 'application/xml; charset=utf-8');
+  if (p === '/api/contact' && req.method === 'POST') return contactSubmit(req, res);
 
   // ── سوپرادمین ──
   if (p === '/admin' || p === '/admin/') return serveFile(res, path.join(ROOT, 'admin'), 'index.html', 'no-store');
@@ -172,10 +215,30 @@ function handle(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed', 'text/plain');
   var c = content();
   var html = null;
+  if ((c.site || {}).maintenance && !isAdminReq(req)) return send(res, 503, render.maintenance(c), null, { 'Retry-After': '3600' });
   if (p === '/' || p === '/index.html') html = render.home(c);
   else if (/^\/p\/[a-z0-9\-]+\/?$/.test(p)) html = render.page(c, p.replace(/^\/p\/|\/$/g, ''));
   if (!html) return send(res, 404, render.notFound(c));
+  countView(req, p.replace(/\/$/, '') || '/');
   send(res, 200, html, null, { 'Cache-Control': 'no-cache' });
+}
+
+function contactSubmit(req, res) {
+  var ip = ipOf(req), now = Date.now();
+  var h = (contactHits[ip] || []).filter(function (t) { return now - t < 10 * 60 * 1000; });
+  if (h.length >= 5) return json(res, 429, { error: 'پیام‌های زیادی فرستادید؛ کمی بعد دوباره امتحان کنید.' });
+  readBody(req, 20000, function (err, b) {
+    if (err || !b) return json(res, 400, { error: 'دادهٔ نامعتبر' });
+    if (b.website) return json(res, 200, { ok: true });   // تلهٔ ربات
+    var name = String(b.name || '').trim().slice(0, 80), phone = String(b.phone || '').trim().slice(0, 20), msg = String(b.msg || '').trim().slice(0, 3000);
+    if (!name || !phone || !msg) return json(res, 400, { error: 'همهٔ بخش‌ها را پر کنید.' });
+    if (!/^[0-9۰-۹+\-\s()]{6,20}$/.test(phone)) return json(res, 400, { error: 'شمارهٔ تماس معتبر نیست.' });
+    h.push(now); contactHits[ip] = h;
+    var all = readJson(MESSAGES, []);
+    all.unshift({ id: now.toString(36) + crypto.randomBytes(3).toString('hex'), at: new Date().toISOString(), name: name, phone: phone, msg: msg, ip: ip, read: false });
+    writeJson(MESSAGES, all.slice(0, 2000));
+    json(res, 200, { ok: true });
+  });
 }
 
 function api(req, res, route) {
@@ -210,7 +273,7 @@ function api(req, res, route) {
       if (err) return json(res, 400, { error: 'دادهٔ نامعتبر' });
       try {
         var c = cleanContent(b.content);
-        try { fs.copyFileSync(CONTENT, CONTENT + '.bak'); } catch (e) { /* — */ }
+        backup();
         writeJson(CONTENT, c);
         json(res, 200, { ok: true, content: c });
       } catch (e) { json(res, 400, { error: e.message }); }
@@ -235,7 +298,7 @@ function api(req, res, route) {
     });
   }
   if (route === 'reset' && req.method === 'POST') {
-    try { fs.copyFileSync(CONTENT, CONTENT + '.bak'); } catch (e) { /* — */ }
+    backup('before-reset');
     writeJson(CONTENT, JSON.parse(JSON.stringify(DEFAULTS)));
     return json(res, 200, { ok: true, content: content() });
   }
@@ -250,6 +313,68 @@ function api(req, res, route) {
       json(res, 200, { ok: true, url: '/uploads/' + name });
     });
   }
+  if (route === 'dashboard') {
+    var days = [], keys = [], now = new Date();
+    for (var i = 29; i >= 0; i--) keys.push(dayKey(new Date(now.getTime() - i * 86400000)));
+    var top = {};
+    keys.forEach(function (k) {
+      var d = stats.days[k] || { views: 0, pages: {} };
+      days.push({ day: k, views: d.views });
+      Object.keys(d.pages).forEach(function (pg) { top[pg] = (top[pg] || 0) + d.pages[pg]; });
+    });
+    var msgs = readJson(MESSAGES, []);
+    return json(res, 200, {
+      days: days, top: Object.keys(top).map(function (k) { return { path: k, views: top[k] }; }).sort(function (a, b) { return b.views - a.views; }).slice(0, 10),
+      messages: msgs.length, unread: msgs.filter(function (m) { return !m.read; }).length,
+    });
+  }
+  if (route === 'messages' && req.method === 'GET') return json(res, 200, { messages: readJson(MESSAGES, []) });
+  if (route === 'messages' && req.method === 'POST') {
+    return readBody(req, 20000, function (err, b) {
+      if (err || !b) return json(res, 400, { error: 'دادهٔ نامعتبر' });
+      var all = readJson(MESSAGES, []);
+      var ids = Array.isArray(b.ids) ? b.ids : [];
+      if (b.action === 'delete') all = all.filter(function (m) { return ids.indexOf(m.id) < 0; });
+      else all.forEach(function (m) { if (ids.indexOf(m.id) >= 0) m.read = b.action !== 'unread'; });
+      writeJson(MESSAGES, all);
+      json(res, 200, { ok: true, messages: all });
+    });
+  }
+  if (route === 'backups' && req.method === 'GET') {
+    var list = fs.readdirSync(BACKUPS).filter(function (f) { return /\.json$/.test(f); }).sort().reverse()
+      .map(function (f) { return { name: f, size: fs.statSync(path.join(BACKUPS, f)).size, at: fs.statSync(path.join(BACKUPS, f)).mtime }; });
+    return json(res, 200, { backups: list });
+  }
+  if (route === 'restore' && req.method === 'POST') {
+    return readBody(req, 10000, function (err, b) {
+      var name = path.basename(String((b && b.name) || ''));
+      var f = path.join(BACKUPS, name);
+      if (err || !/^content-[\w\-]+\.json$/.test(name) || !fs.existsSync(f)) return json(res, 400, { error: 'نسخه پیدا نشد' });
+      var c = readJson(f, null);
+      if (!c) return json(res, 400, { error: 'فایل خراب است' });
+      backup('before-restore');
+      writeJson(CONTENT, c);
+      json(res, 200, { ok: true, content: c });
+    });
+  }
+  if (route === 'media' && req.method === 'GET') {
+    var files = fs.readdirSync(UPLOADS).filter(function (f) { return /\.(png|jpe?g|webp|gif|ico)$/i.test(f); })
+      .map(function (f) { var st = fs.statSync(path.join(UPLOADS, f)); return { name: f, url: '/uploads/' + f, size: st.size, at: st.mtime }; })
+      .sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
+    var builtin = fs.readdirSync(path.join(ROOT, 'public', 'assets', 'img')).filter(function (f) { return /\.(png|jpe?g|webp)$/i.test(f); })
+      .map(function (f) { return { name: f, url: '/assets/img/' + f, builtin: true }; });
+    return json(res, 200, { files: files, builtin: builtin });
+  }
+  if (route === 'media-delete' && req.method === 'POST') {
+    return readBody(req, 10000, function (err, b) {
+      var name = path.basename(String((b && b.name) || ''));
+      var f = path.join(UPLOADS, name);
+      if (err || !name || !fs.existsSync(f)) return json(res, 400, { error: 'فایل پیدا نشد' });
+      if (JSON.stringify(content()).indexOf('/uploads/' + name) >= 0) return json(res, 400, { error: 'این تصویر در سایت استفاده شده؛ اول از آن‌جا برش دارید.' });
+      fs.unlinkSync(f);
+      json(res, 200, { ok: true });
+    });
+  }
   if (route === 'password' && req.method === 'POST') {
     return readBody(req, 10000, function (err, b) {
       var a = readJson(ADMIN, null);
@@ -262,6 +387,10 @@ function api(req, res, route) {
   }
   json(res, 404, { error: 'not_found' });
 }
+
+['SIGTERM', 'SIGINT'].forEach(function (sig) {
+  process.on(sig, function () { try { if (statsDirty) writeJson(STATS, stats); } catch (e) { /* — */ } process.exit(0); });
+});
 
 http.createServer(function (req, res) {
   try { handle(req, res); } catch (e) { console.error(e); if (!res.headersSent) send(res, 500, 'server error', 'text/plain'); }
