@@ -214,6 +214,12 @@ function api(req, res, route) {
       } catch (e) { json(res, 400, { error: e.message }); }
     });
   }
+  if (route === 'preview' && req.method === 'POST') {
+    return readBody(req, 512 * 1024, function (err, b) {
+      if (err) return json(res, 400, { error: 'دادهٔ نامعتبر' });
+      json(res, 200, { html: render.md(String((b && b.body) || '')) });
+    });
+  }
   if (route === 'reset' && req.method === 'POST') {
     try { fs.copyFileSync(CONTENT, CONTENT + '.bak'); } catch (e) { /* — */ }
     writeJson(CONTENT, JSON.parse(JSON.stringify(DEFAULTS)));

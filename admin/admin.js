@@ -40,8 +40,10 @@
       { k: 'showAgents', l: 'نمایش بخش ایجنت‌ها', t: 'bool' },
       { k: 'agentsTitle', l: 'عنوان بخش ایجنت‌ها' }, { k: 'agentsDesc', l: 'توضیح بخش ایجنت‌ها', t: 'textarea' },
       { k: 'showAbout', l: 'نمایش بخش معرفی', t: 'bool' },
-      { k: 'aboutTitle', l: 'عنوان بخش معرفی' }, { k: 'aboutText', l: 'متن بخش معرفی', t: 'textarea', h: 'بین پاراگراف‌ها یک خط خالی' },
+      { k: 'aboutTitle', l: 'عنوان بخش معرفی' }, { k: 'aboutText', l: 'متن بخش معرفی', t: 'md' },
       { k: 'pillars', l: 'کارت‌های بخش معرفی', t: 'list', item: [{ k: 'title', l: 'عنوان' }, { k: 'desc', l: 'توضیح', t: 'textarea' }, { k: 'icon', l: 'آیکن', h: ICON_HELP }], title: 'title' },
+      { k: 'sections', l: 'بخش‌های دلخواه (زیر بخش معرفی)', t: 'list', title: 'title', item: [
+        { k: 'title', l: 'عنوان بخش' }, { k: 'enabled', l: 'نمایش', t: 'bool' }, { k: 'body', l: 'متن', t: 'md' }] },
       { k: 'showContact', l: 'نمایش اطلاعات تماس در صفحهٔ اصلی', t: 'bool' },
     ] },
     { id: 'agents', title: 'ایجنت‌ها', icon: 'fa-solid fa-users-gear', path: [], fields: [
@@ -60,19 +62,11 @@
       { k: 'socials', l: 'شبکه‌های اجتماعی', t: 'list', title: 'label', item: [
         { k: 'label', l: 'نام' }, { k: 'value', l: 'نمایش' }, { k: 'url', l: 'لینک', h: 'مثل https://t.me/…' }, { k: 'icon', l: 'آیکن', h: ICON_HELP }] },
     ] },
-    { id: 'pages', title: 'صفحات', icon: 'fa-solid fa-file-lines', path: [], help:
-      'هر صفحه در نشانیِ <code>/p/slug</code> باز می‌شود. قالبِ متن: <code>## تیتر</code>، <code>### زیرتیتر</code>، ' +
-      '<code>- مورد فهرست</code>، <code>**پررنگ**</code>، <code>[متن](https://…)</code>، و یک خطِ خالی بین پاراگراف‌ها.', fields: [
-      { k: 'pages', l: 'صفحات', t: 'list', title: 'title', item: [
-        { k: 'title', l: 'عنوان' }, { k: 'slug', l: 'نشانی (لاتین)', h: 'مثل terms' },
-        { k: 'description', l: 'توضیح سئو', t: 'textarea' },
-        { k: 'enabled', l: 'فعال', t: 'bool' }, { k: 'inMenu', l: 'در منوی بالا', t: 'bool' }, { k: 'inFooter', l: 'در فوتر', t: 'bool' },
-        { k: 'showContact', l: 'نمایش اطلاعات تماس زیر متن', t: 'bool' },
-        { k: 'body', l: 'متن صفحه', t: 'big' }] },
-    ] },
-    { id: 'account', title: 'حساب و پشتیبان', icon: 'fa-solid fa-user-shield', custom: true },
+    { id: 'pages', title: 'صفحات', icon: 'fa-solid fa-file-lines', custom: 'pages' },
+    { id: 'account', title: 'حساب و پشتیبان', icon: 'fa-solid fa-user-shield', custom: 'account' },
   ];
   var NEW_ITEM = {
+    sections: function () { return { title: 'بخش تازه', enabled: true, body: '' }; },
     pages: function () { return { title: 'صفحهٔ تازه', slug: 'page-' + Date.now().toString(36), enabled: true, inMenu: false, inFooter: true, showContact: false, body: '' }; },
   };
 
@@ -118,6 +112,7 @@
       return wrap;
     }
     var inp;
+    if (t === 'md') { wrap.appendChild(mdEditor(obj, f.k)); return wrap; }
     if (t === 'textarea' || t === 'code' || t === 'big') {
       inp = el('textarea', { class: t === 'code' ? 'code' : t === 'big' ? 'big' : '' });
       inp.value = v == null ? '' : v;
@@ -157,6 +152,112 @@
       wrap.appendChild(inp);
     }
     return wrap;
+  }
+
+
+  // ── ویرایشگرِ متن با نوارِ قالب‌بندی و پیش‌نمایش ─────────────────────────
+  function mdEditor(obj, key) {
+    var ta = el('textarea', { class: 'big' });
+    ta.value = obj[key] == null ? '' : obj[key];
+    var prev = el('div', { class: 'md-prev', 'data-site-public': '' });
+    var prevBody = el('div', { class: 'body' });
+    prev.appendChild(el('div', { class: 'article' }, [prevBody]));
+    var timer = 0;
+    function refresh() {
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        api('POST', 'preview', { body: ta.value }).then(function (r) { prevBody.innerHTML = r.html || '<p style="opacity:.5">(خالی)</p>'; }).catch(function () {});
+      }, 250);
+    }
+    function changed() { obj[key] = ta.value; markDirty(); refresh(); }
+    ta.addEventListener('input', changed);
+    function wrapSel(before, after, ph) {
+      var a = ta.selectionStart, b = ta.selectionEnd, sel = ta.value.slice(a, b) || ph;
+      ta.value = ta.value.slice(0, a) + before + sel + after + ta.value.slice(b);
+      ta.focus(); ta.setSelectionRange(a + before.length, a + before.length + sel.length); changed();
+    }
+    function linePrefix(pre, ph) {
+      var a = ta.selectionStart, b = ta.selectionEnd;
+      var ls = ta.value.lastIndexOf('\n', a - 1) + 1;
+      var block = ta.value.slice(ls, b) || ph;
+      var out = block.split('\n').map(function (l) { return pre + l.replace(/^(#{2,3}\s+|[-*]\s+|>\s?)/, ''); }).join('\n');
+      var lead = ls > 0 && ta.value.slice(ls - 2, ls) !== '\n\n' ? '\n' : '';
+      ta.value = ta.value.slice(0, ls) + lead + out + '\n' + ta.value.slice(b);
+      ta.focus(); changed();
+    }
+    var tools = [
+      ['fa-solid fa-heading', 'تیتر', function () { linePrefix('## ', 'تیتر'); }],
+      ['fa-solid fa-font', 'زیرتیتر', function () { linePrefix('### ', 'زیرتیتر'); }],
+      ['fa-solid fa-bold', 'پررنگ', function () { wrapSel('**', '**', 'متن پررنگ'); }],
+      ['fa-solid fa-list-ul', 'فهرست', function () { linePrefix('- ', 'مورد'); }],
+      ['fa-solid fa-quote-right', 'نقل‌قول', function () { linePrefix('> ', 'نقل‌قول'); }],
+      ['fa-solid fa-link', 'لینک', function () {
+        var u = prompt('نشانیِ لینک (مثل https://… یا /p/about):', 'https://');
+        if (u) wrapSel('[', '](' + u.trim() + ')', 'متن لینک');
+      }],
+    ];
+    var bar = el('div', { class: 'md-bar' }, tools.map(function (t) {
+      return el('button', { class: 'btn sm', type: 'button', title: t[1], onclick: t[2] }, [el('i', { class: t[0] }), document.createTextNode(t[1])]);
+    }));
+    refresh();
+    return el('div', { class: 'md-ed' }, [bar, el('div', { class: 'md-split' }, [ta, prev])]);
+  }
+
+  // ── مدیریتِ صفحات: فهرست ← ویرایشگرِ هر صفحه ─────────────────────────────
+  var editPage = null;
+  function pagesPanel(panel) {
+    var list = Array.isArray(C.pages) ? C.pages : (C.pages = []);
+    if (editPage !== null && list[editPage]) return pageEditor(panel, list[editPage]);
+    editPage = null;
+    panel.appendChild(el('div', { class: 'pages-top' }, [
+      el('p', { class: 'muted', text: 'هر صفحه در نشانیِ /p/نشانی باز می‌شود. ترتیب این فهرست، ترتیبِ منو و فوتر است.' }),
+      el('button', { class: 'btn primary', type: 'button', onclick: function () {
+        list.push({ title: 'صفحهٔ تازه', slug: 'page-' + Date.now().toString(36), enabled: true, inMenu: false, inFooter: true, showContact: false, description: '', body: '' });
+        editPage = list.length - 1; markDirty(); show('pages');
+      } }, [el('i', { class: 'fa-solid fa-plus' }), document.createTextNode('صفحهٔ جدید')]),
+    ]));
+    var rerender = function () { show('pages'); };
+    list.forEach(function (p, i) {
+      var chips = el('div', { class: 'chips' }, [
+        el('span', { class: 'chip ' + (p.enabled === false ? 'off' : 'on'), text: p.enabled === false ? 'غیرفعال' : 'فعال' }),
+        p.inMenu ? el('span', { class: 'chip', text: 'منو' }) : null,
+        p.inFooter ? el('span', { class: 'chip', text: 'فوتر' }) : null,
+        p.showContact ? el('span', { class: 'chip', text: 'اطلاعات تماس' }) : null,
+      ]);
+      panel.appendChild(el('div', { class: 'page-row' }, [
+        el('div', { class: 'page-info', onclick: function () { editPage = i; show('pages'); window.scrollTo(0, 0); } }, [
+          el('b', { text: p.title || '(بی‌عنوان)' }), el('code', { text: '/p/' + (p.slug || '') }), chips]),
+        el('div', { class: 'page-acts' }, [
+          el('button', { class: 'btn sm', type: 'button', onclick: function () { editPage = i; show('pages'); window.scrollTo(0, 0); } }, [el('i', { class: 'fa-solid fa-pen' }), document.createTextNode('ویرایش')]),
+          el('a', { class: 'btn sm', href: '/p/' + (p.slug || ''), target: '_blank', title: 'مشاهده' }, [el('i', { class: 'fa-solid fa-eye' })]),
+          el('button', { class: 'btn sm', type: 'button', title: 'بالا', onclick: function () { if (i) { list.splice(i - 1, 0, list.splice(i, 1)[0]); markDirty(); rerender(); } } }, [el('i', { class: 'fa-solid fa-arrow-up' })]),
+          el('button', { class: 'btn sm', type: 'button', title: 'پایین', onclick: function () { if (i < list.length - 1) { list.splice(i + 1, 0, list.splice(i, 1)[0]); markDirty(); rerender(); } } }, [el('i', { class: 'fa-solid fa-arrow-down' })]),
+          el('button', { class: 'btn sm danger', type: 'button', title: 'حذف', onclick: function () { if (confirm('صفحهٔ «' + (p.title || '') + '» حذف شود؟')) { list.splice(i, 1); markDirty(); rerender(); } } }, [el('i', { class: 'fa-solid fa-trash' })]),
+        ]),
+      ]));
+    });
+    if (!list.length) panel.appendChild(el('p', { class: 'muted', text: 'هنوز صفحه‌ای نیست؛ «صفحهٔ جدید» را بزنید.' }));
+  }
+  function pageEditor(panel, p) {
+    $('#secTitle').textContent = 'ویرایش صفحه';
+    panel.appendChild(el('div', { class: 'pages-top' }, [
+      el('button', { class: 'btn', type: 'button', onclick: function () { editPage = null; show('pages'); } }, [el('i', { class: 'fa-solid fa-arrow-right' }), document.createTextNode('همهٔ صفحات')]),
+      el('a', { class: 'btn', href: '/p/' + (p.slug || ''), target: '_blank' }, [el('i', { class: 'fa-solid fa-eye' }), document.createTextNode('مشاهده (پس از ذخیره)')]),
+    ]));
+    var noop = function () { show('pages'); };
+    var grid = el('div', { class: 'grid2' }, [
+      fieldEl(p, { k: 'title', l: 'عنوان صفحه' }, noop),
+      fieldEl(p, { k: 'slug', l: 'نشانی (لاتین)', h: 'مثل terms ⇒ /p/terms' }, noop),
+    ]);
+    panel.appendChild(grid);
+    panel.appendChild(fieldEl(p, { k: 'description', l: 'توضیح کوتاه برای گوگل (سئو)', t: 'textarea' }, noop));
+    var toggles = el('div', { class: 'toggles' });
+    [{ k: 'enabled', l: 'فعال' }, { k: 'inMenu', l: 'در منوی بالا' }, { k: 'inFooter', l: 'در فوتر' }, { k: 'showContact', l: 'اطلاعات تماس زیر متن' }]
+      .forEach(function (f) { f.t = 'bool'; toggles.appendChild(fieldEl(p, f, noop)); });
+    panel.appendChild(toggles);
+    var w = el('div', { class: 'field' }, [el('span', { text: 'متن صفحه' })]);
+    w.appendChild(mdEditor(p, 'body'));
+    panel.appendChild(w);
   }
 
   function accountPanel(panel) {
@@ -203,7 +304,8 @@
     Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (b) { b.classList.toggle('on', b.dataset.id === id); });
     var panel = $('#panel'); panel.innerHTML = '';
     if (sec.help) panel.appendChild(el('div', { class: 'help', html: sec.help }));
-    if (sec.custom) { accountPanel(panel); return; }
+    if (sec.custom === 'account') { accountPanel(panel); return; }
+    if (sec.custom === 'pages') { pagesPanel(panel); return; }
     var y = window.scrollY;
     var rerender = function () { show(id); window.scrollTo(0, y); };
     var obj = objAt(sec.path);
@@ -214,7 +316,7 @@
   function boot() {
     var tabs = $('#tabs');
     SECTIONS.forEach(function (s) {
-      tabs.appendChild(el('button', { type: 'button', 'data-id': s.id, onclick: function () { show(s.id); window.scrollTo(0, 0); } },
+      tabs.appendChild(el('button', { type: 'button', 'data-id': s.id, onclick: function () { editPage = null; show(s.id); window.scrollTo(0, 0); } },
         [el('i', { class: s.icon }), document.createTextNode(s.title)]));
     });
     $('#menuBtn').onclick = function () { $('.side').classList.toggle('open'); };
